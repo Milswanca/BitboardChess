@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/Object.h"
 #include "ChessTypes.h"
+#include <array>
 #include <glm/glm.hpp>
 
 class UChessModel : public UObject
@@ -48,7 +49,7 @@ public:
 	void CalculateMoves();
 	uchar GetPiece(uchar Square) const;
 	uchar GetOwner(uchar Square) const;
-	
+
 private:
 	static const uint64_t AFile;
 	static const uint64_t HFile;

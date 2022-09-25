@@ -9,6 +9,27 @@ const uint64_t UChessModel::HFile = 0b100000001000000010000000100000001000000010
 const uint64_t UChessModel::Rank2 = 0b0000000000000000000000000000000000000000000000001111111100000000;
 const uint64_t UChessModel::Rank7 = 0b0000000011111111000000000000000000000000000000000000000000000000;
 
+constexpr auto bit_counter_array{ 
+	[]() constexpr 
+	{
+		std::array<uchar, 32768> result{};
+		for (unsigned short i = 0; i < 32768; ++i)
+		{
+			unsigned short c = i;
+			int count = 0;
+
+			while (c)
+			{
+				count++;
+				c &= c - 1;
+			}
+
+			result[i] = (uchar)count;
+		}
+		return result;
+	}() 
+};
+
 int move_encode(uchar source, uchar target, uchar piece, uchar promotion)
 {
 	return (source) | (target << 6) | (piece << 12) | (promotion << 16);
@@ -63,15 +84,19 @@ void move_bit(uint64_t& bitboard, uchar from, uchar to)
 
 uchar count_bits(uint64_t bitboard)
 {
-	int count = 0;
+	unsigned short s1 = (bitboard & 0b0000000000000000000000000000000000000000000000000111111111111111) >> 0;
+	unsigned short s2 = (bitboard & 0b0000000000000000000000000000000000111111111111111000000000000000) >> 15;
+	unsigned short s3 = (bitboard & 0b0000000000000000000111111111111111000000000000000000000000000000) >> 30;
+	unsigned short s4 = (bitboard & 0b0000111111111111111000000000000000000000000000000000000000000000) >> 45;
+	unsigned short s5 = (bitboard & 0b1111000000000000000000000000000000000000000000000000000000000000) >> 60;
 
-	while (bitboard)
-	{
-		count++;
-		bitboard &= bitboard - 1;
-	}
+	uchar v1 = bit_counter_array.at(s1);
+	uchar v2 = bit_counter_array.at(s2);
+	uchar v3 = bit_counter_array.at(s3);
+	uchar v4 = bit_counter_array.at(s4);
+	uchar v5 = bit_counter_array.at(s5);
 
-	return count;
+	return v1 + v2 + v3 + v4 + v5;
 }
 
 uchar get_ls_bit_index(uint64_t bitboard)
