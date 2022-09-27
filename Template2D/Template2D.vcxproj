@@ -33,6 +33,7 @@
     <ClCompile Include="Source\glad.c" />
     <ClCompile Include="Source\Private\Core\Engine.cpp" />
     <ClCompile Include="Source\Private\Math\Transform.cpp" />
+    <ClCompile Include="Source\Private\Utils\Delegate.cpp" />
     <ClCompile Include="Source\Private\Utils\FileUtils.cpp" />
     <ClCompile Include="Source\Private\Utils\StringUtils.cpp" />
     <ClCompile Include="Source\Template2D.cpp" />
@@ -60,6 +61,7 @@
     <ClInclude Include="Source\Public\Math\Transform.h" />
     <ClInclude Include="Source\Public\Core\World.h" />
     <ClInclude Include="Source\Public\Template2DCore.h" />
+    <ClInclude Include="Source\Public\Utils\Delegate.h" />
     <ClInclude Include="Source\Public\Utils\FileUtils.h" />
     <ClInclude Include="Source\Public\Utils\StringUtils.h" />
     <ClInclude Include="Source\Public\Rendering\Sprite.h" />

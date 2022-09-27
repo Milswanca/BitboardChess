@@ -163,6 +163,9 @@
     <ProjectReference />
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Source\Private\BitboardUtils.cpp" />
+    <ClCompile Include="Source\Private\Rays.cpp" />
+    <ClCompile Include="Source\Private\MoveGen.cpp" />
     <ClCompile Include="Source\Private\ChessStatics.cpp" />
     <ClCompile Include="Source\Private\ChessTypes.cpp" />
     <ClCompile Include="Source\Private\ChessController.cpp" />
@@ -172,6 +175,9 @@
     <ClCompile Include="Source\Main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Public\BitboardUtils.h" />
+    <ClInclude Include="Source\Public\Rays.h" />
+    <ClInclude Include="Source\Public\MoveGen.h" />
     <ClInclude Include="Source\Public\ChessStatics.h" />
     <ClInclude Include="Source\Public\ChessTypes.h" />
     <ClInclude Include="Source\Public\ChessController.h" />

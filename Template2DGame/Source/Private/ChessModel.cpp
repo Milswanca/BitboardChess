@@ -1,132 +1,27 @@
-#pragma warning(disable:4146)
 #include "ChessModel.h"
 #include "ChessStatics.h"
+#include "BitboardUtils.h"
+#include "MoveGen.h"
 
+#include <functional>
 #include <glm/gtc/integer.hpp>
-
-const uint64_t UChessModel::AFile = 0b0000000100000001000000010000000100000001000000010000000100000001;
-const uint64_t UChessModel::HFile = 0b1000000010000000100000001000000010000000100000001000000010000000;
-const uint64_t UChessModel::Rank2 = 0b0000000000000000000000000000000000000000000000001111111100000000;
-const uint64_t UChessModel::Rank7 = 0b0000000011111111000000000000000000000000000000000000000000000000;
-
-constexpr auto bit_counter_array{ 
-	[]() constexpr 
-	{
-		std::array<uchar, 32768> result{};
-		for (unsigned short i = 0; i < 32768; ++i)
-		{
-			unsigned short c = i;
-			int count = 0;
-
-			while (c)
-			{
-				count++;
-				c &= c - 1;
-			}
-
-			result[i] = (uchar)count;
-		}
-		return result;
-	}() 
-};
-
-int move_encode(uchar source, uchar target, uchar piece, uchar promotion)
-{
-	return (source) | (target << 6) | (piece << 12) | (promotion << 16);
-}
-
-uchar move_get_source(int move)
-{
-	return move & 0x3f;
-}
-
-uchar move_get_target(int move)
-{
-	return (move & 0xfc0) >> 6;
-}
-
-uchar move_get_piece(int move)
-{
-	return (move & 0xf000) >> 12;
-}
-
-uchar move_get_promotion(int move)
-{
-	return (move & 0xf0000) >> 16;
-}
-
-void pop_bit(uint64_t& bitboard, uchar index)
-{
-	(bitboard) &= ~(1ULL << (index));
-}
-
-void set_bit(uint64_t& bitboard, uchar index)
-{
-	bitboard |= (1ULL << index);
-}
-
-bool get_bit(uint64_t bitboard, uchar index)
-{
-	return ((bitboard >> index) & 1);
-}
-
-void move_bit(uint64_t& bitboard, uchar from, uchar to)
-{
-	// Clear the to bit
-	bitboard &= ~(1ULL << to);
-
-	// Set the to bit to 1 if it is on in from
-	bitboard |= ((uint64_t)get_bit(bitboard, from) << to);
-
-	// Clear the from bit
-	bitboard &= ~(1ULL << from);
-}
-
-uchar count_bits(uint64_t bitboard)
-{
-	unsigned short s1 = (bitboard & 0b0000000000000000000000000000000000000000000000000111111111111111) >> 0;
-	unsigned short s2 = (bitboard & 0b0000000000000000000000000000000000111111111111111000000000000000) >> 15;
-	unsigned short s3 = (bitboard & 0b0000000000000000000111111111111111000000000000000000000000000000) >> 30;
-	unsigned short s4 = (bitboard & 0b0000111111111111111000000000000000000000000000000000000000000000) >> 45;
-	unsigned short s5 = (bitboard & 0b1111000000000000000000000000000000000000000000000000000000000000) >> 60;
-
-	uchar v1 = bit_counter_array.at(s1);
-	uchar v2 = bit_counter_array.at(s2);
-	uchar v3 = bit_counter_array.at(s3);
-	uchar v4 = bit_counter_array.at(s4);
-	uchar v5 = bit_counter_array.at(s5);
-
-	return v1 + v2 + v3 + v4 + v5;
-}
-
-uchar get_ls_bit_index(uint64_t bitboard)
-{
-	if (bitboard)
-	{
-		return (uchar)count_bits((bitboard & -bitboard) - 1);
-	}
-	else
-	{
-		return 255;
-	}
-}
 
 UChessModel::FBoardState::FBoardState()
 {
-	BMPieces[0] = 0b0000000011111111000000000000000000000000000000001111111100000000;
-	BMPieces[1] = 0b1000000100000000000000000000000000000000000000000000000010000001;
-	BMPieces[2] = 0b0100001000000000000000000000000000000000000000000000000001000010;
-	BMPieces[3] = 0b0010010000000000000000000000000000000000000000000000000000100100;
-	BMPieces[4] = 0b0001000000000000000000000000000000000000000000000000000000010000;
-	BMPieces[5] = 0b0000100000000000000000000000000000000000000000000000000000001000;
+	BMPieces[0] = Rank2 | Rank7;
+	BMPieces[1] = A1 | H1 | A8 | H8;
+	BMPieces[2] = B1 | G1 | B8 | G8;
+	BMPieces[3] = C1 | F1 | C8 | F8;
+	BMPieces[4] = D1 | D8;
+	BMPieces[5] = E1 | E8;
 
-	BMWhite = 0b0000000000000000000000000000000000000000000000001111111111111111;
-	BMBlack = 0b1111111111111111000000000000000000000000000000000000000000000000;
-	BMCheck = 0b0000000000000000000000000000000000000000000000000000000000000000;
-	BMHPin = 0b0000000000000000000000000000000000000000000000000000000000000000;
-	BMVPin = 0b0000000000000000000000000000000000000000000000000000000000000000;
-	BMD1Pin = 0b0000000000000000000000000000000000000000000000000000000000000000;
-	BMD2Pin = 0b0000000000000000000000000000000000000000000000000000000000000000;
+	BMWhite = Rank1 | Rank2;
+	BMBlack = Rank7 | Rank8;
+	BMCheck = 0;
+	BMHPin = 0;
+	BMVPin = 0;
+	BMD1Pin = 0;
+	BMD2Pin = 0;
 
 	NumMoves = 0;
 	Turn = EChessColors::White;
@@ -137,12 +32,31 @@ UChessModel::FBoardState::~FBoardState()
 
 }
 
+int UChessModel::FBoardState::GetPiece(int Square) const
+{
+	uchar Piece = 0;
+	for (uchar i = 0; i < 6; ++i)
+	{
+		Piece |= (BitboardUtils::Get(BMPieces[i], Square) << i);
+	}
+
+	return glm::log2(Piece);
+}
+
+int UChessModel::FBoardState::GetOwner(int Square) const
+{
+	uchar Owner = 0;
+	Owner = (BitboardUtils::Get(BMBlack, Square) << 2) | (BitboardUtils::Get(BMWhite, Square) << 1) | (BitboardUtils::Get(~(BMWhite | BMBlack), Square) << 0);
+	return glm::log2(Owner);
+}
+
 void UChessModel::Begin()
 {
 	UObject::Begin();
 
 	State = new	FBoardState();
-	CalculateMoves();
+	MoveGen::Init();
+	GenerateMoves();
 }
 
 void UChessModel::End()
@@ -155,20 +69,22 @@ void UChessModel::End()
 
 bool UChessModel::DoMove(int Move)
 {
-	uchar Source = move_get_source(Move);
-	uchar Target = move_get_target(Move);
-	uchar Piece = move_get_piece(Move);
+	int Source;
+	int Target;
+	int Piece;
+	int Promotion;
+	MoveGen::DecodeMove(Move, Source, Target, Piece, Promotion);
 
 	for (uchar i = 0; i < 6; ++i)
 	{
-		pop_bit(State->BMPieces[i], Target);
+		BitboardUtils::Pop(State->BMPieces[i], Target);
 	}
 
-	move_bit(State->BMPieces[Piece], Source, Target);
-	move_bit(State->BMWhite, Source, Target);
-	move_bit(State->BMBlack, Source, Target);
+	BitboardUtils::Move(State->BMPieces[Piece], Source, Target);
+	BitboardUtils::Move(State->BMWhite, Source, Target);
+	BitboardUtils::Move(State->BMBlack, Source, Target);
 
-	CalculateMoves();
+	GenerateMoves();
 
 	return true;
 }
@@ -179,7 +95,7 @@ bool UChessModel::FindMove(uchar From, uchar To, int& Move) const
 
 	for (int i = 0; i < State->NumMoves; ++i)
 	{
-		if ((State->Moves[i] & 0xfff) == MoveMask)
+		if ((State->Moves[i] & 0xFFF) == MoveMask)
 		{
 			Move = State->Moves[i];
 			return true;
@@ -189,187 +105,17 @@ bool UChessModel::FindMove(uchar From, uchar To, int& Move) const
 	return false;
 }
 
-void UChessModel::CalculateVision()
+void UChessModel::GenerateMoves()
 {
-	for (uchar i = 0; i < 64; ++i)
-	{
-		State->BMVision[i] = 0;
-	}
-
-	CalculateVision_Pawn();
+	MoveGen::GenerateMoves(State);
 }
 
-void UChessModel::CalculateVision_Pawn()
+int UChessModel::GetPiece(int Square) const
 {
-	uint64_t WhitePawns = State->BMPieces[0] & State->BMWhite;
-	uint64_t WhitePawnsRank2 = WhitePawns & Rank2;
-	uint64_t WhitePawnsNotRank2 = WhitePawns & ~(Rank2);
-	uint64_t WhitePawnsNotAFile = WhitePawns & ~(AFile);
-	uint64_t WhitePawnsNotHFile = WhitePawns & ~(HFile);
-
-	// Forward Moves - White
-	while (WhitePawnsNotRank2)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(WhitePawnsNotRank2);
-		if (!get_bit(State->BMBlack | State->BMWhite, Source + 8))
-		{
-			set_bit(PieceVision, Source + 8);
-		}
-
-		pop_bit(WhitePawnsNotRank2, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
-
-	// Double Moves - White
-	while (WhitePawnsRank2)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(WhitePawnsRank2);
-		if (!get_bit(State->BMBlack | State->BMWhite, Source + 8))
-		{
-			set_bit(PieceVision, Source + 8);
-			if (!get_bit(State->BMBlack | State->BMWhite, Source + 16))
-			{
-				set_bit(PieceVision, Source + 16);
-			}
-		}
-
-		pop_bit(WhitePawnsRank2, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
-
-	// Attack Left Moves - White
-	while (WhitePawnsNotAFile)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(WhitePawnsNotAFile);
-		if (get_bit(State->BMBlack, Source + 7))
-		{
-			set_bit(PieceVision, Source + 7);
-		}
-
-		pop_bit(WhitePawnsNotAFile, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
-
-	// Attack Right Moves - White
-	while (WhitePawnsNotHFile)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(WhitePawnsNotHFile);
-		if (get_bit(State->BMBlack, Source + 9))
-		{
-			set_bit(PieceVision, Source + 9);
-		}
-
-		pop_bit(WhitePawnsNotHFile, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
-
-	uint64_t BlackPawns = State->BMPieces[0] & State->BMBlack;
-	uint64_t BlackPawnsRank7 = BlackPawns & Rank7;
-	uint64_t BlackPawnsNotRank7 = BlackPawns & ~(Rank7);
-	uint64_t BlackPawnsNotAFile = BlackPawns & ~(AFile);
-	uint64_t BlackPawnsNotHFile = BlackPawns & ~(HFile);
-
-	// Forward Moves - Black
-	while (BlackPawnsNotRank7)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(BlackPawnsNotRank7);
-		if (!get_bit(State->BMBlack | State->BMWhite, Source - 8))
-		{
-			set_bit(PieceVision, Source - 8);
-		}
-
-		pop_bit(BlackPawnsNotRank7, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
-
-	// Double Moves - Black
-	while (BlackPawnsRank7)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(BlackPawnsRank7);
-		if (!get_bit(State->BMBlack | State->BMWhite, Source - 8))
-		{
-			set_bit(PieceVision, Source - 8);
-			if (!get_bit(State->BMBlack | State->BMWhite, Source - 16))
-			{
-				set_bit(PieceVision, Source - 16);
-			}
-		}
-
-		pop_bit(BlackPawnsRank7, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
-
-	// Attack Left Moves - Black
-	while (BlackPawnsNotAFile)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(BlackPawnsNotAFile);
-		if (get_bit(State->BMWhite, Source - 9))
-		{
-			set_bit(PieceVision, Source - 9);
-		}
-
-		pop_bit(BlackPawnsNotAFile, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
-
-	// Attack Right Moves - Black
-	while (BlackPawnsNotHFile)
-	{
-		uint64_t PieceVision = 0u;
-		uchar Source = get_ls_bit_index(BlackPawnsNotHFile);
-		if (get_bit(State->BMWhite, Source - 7))
-		{
-			set_bit(PieceVision, Source - 7);
-		}
-
-		pop_bit(BlackPawnsNotHFile, Source);
-		State->BMVision[Source] |= PieceVision;
-	}
+	return State->GetPiece(Square);
 }
 
-void UChessModel::CalculateMoves()
+int UChessModel::GetOwner(int Square) const
 {
-	State->NumMoves = 0;
-	CalculateVision();
-
-	for (uchar i = 0; i < 64; ++i)
-	{
-		uint64_t Bitboard = State->BMVision[i];
-
-		while (Bitboard)
-		{
-			uchar Source = i;
-			uchar Target = get_ls_bit_index(Bitboard);
-			uchar Piece = GetPiece(Source);
-
-			State->Moves[State->NumMoves++] = move_encode(Source, Target, Piece, 0);
-
-			pop_bit(Bitboard, Target);
-		}
-	}
-}
-
-uchar UChessModel::GetPiece(uchar Square) const
-{
-	uchar Piece = 0;
-	for (uchar i = 0; i < 6; ++i)
-	{
-		Piece |= (get_bit(State->BMPieces[i], Square) << i);
-	}
-
-	return glm::log2(Piece);
-}
-
-uchar UChessModel::GetOwner(uchar Square) const
-{
-	uchar Owner = 0;
-	Owner = (get_bit(State->BMBlack, Square) << 2) | (get_bit(State->BMWhite, Square) << 1) | (get_bit(~(State->BMWhite | State->BMBlack), Square) << 0);
-	return glm::log2(Owner);
+	return State->GetOwner(Square);
 }

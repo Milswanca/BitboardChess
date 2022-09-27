@@ -6,6 +6,7 @@
 
 class UChessModel : public UObject
 {
+public:
 	struct FBoardState
 	{
 		FBoardState();
@@ -32,6 +33,9 @@ class UChessModel : public UObject
 		uint64_t BMVPin;
 		uint64_t BMD1Pin;
 		uint64_t BMD2Pin;
+
+		int GetPiece(int Square) const;
+		int GetOwner(int Square) const;
 	};
 
 protected:
@@ -46,18 +50,10 @@ public:
 	bool DoMove(int Move);
 	bool FindMove(uchar From, uchar To, int& Move) const;
 
-	void CalculateMoves();
-	uchar GetPiece(uchar Square) const;
-	uchar GetOwner(uchar Square) const;
+	void GenerateMoves();
+	int GetPiece(int Square) const;
+	int GetOwner(int Square) const;
 
 private:
-	static const uint64_t AFile;
-	static const uint64_t HFile;
-	static const uint64_t Rank2;
-	static const uint64_t Rank7;
-
-	void CalculateVision();
-	void CalculateVision_Pawn();
-
 	FBoardState* State;
 };
