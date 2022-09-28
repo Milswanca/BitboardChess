@@ -2,6 +2,8 @@
 #include "ChessStatics.h"
 #include "BitboardUtils.h"
 #include "MoveGen.h"
+#include "Rays.h"
+#include <iostream>
 
 #include <functional>
 #include <glm/gtc/integer.hpp>
@@ -54,8 +56,10 @@ void UChessModel::Begin()
 {
 	UObject::Begin();
 
-	State = new	FBoardState();
+	Rays::Init();
 	MoveGen::Init();
+
+	State = new	FBoardState();
 	GenerateMoves();
 }
 

@@ -6,11 +6,13 @@
 #include <iostream>
 #include <intrin.h>
 
-uint64_t MoveGen::KnightVisionMask[64] = {};
-uint64_t MoveGen::RookVisionMask[64][4096] = {};
-uint64_t MoveGen::BishopVisionMask[64][1024] = {};
-uint64_t MoveGen::KingVisionMask[64] = {};
-uint64_t MoveGen::RookFullMovementMask[64] = {};
+uint64_t MoveGen::VisionMask_Knight[64];
+uint64_t MoveGen::VisionMask_Rook[64][4096];
+uint64_t MoveGen::VisionMask_Bishop[64][1024];
+uint64_t MoveGen::VisionMask_King[64];
+
+uint64_t MoveGen::BlockersMask_Rook[64];
+uint64_t MoveGen::BlockersMask_Bishop[64];
 
 const uint64_t MoveGen::RookMagics[64] = {
 	0xa8002c000108020ULL, 0x6c00049b0002001ULL, 0x100200010090040ULL, 0x2480041000800801ULL, 0x280028004000800ULL,
@@ -26,6 +28,17 @@ const uint64_t MoveGen::RookMagics[64] = {
 	0x200100401700ULL, 0x2244100408008080ULL, 0x8000400801980ULL, 0x2000810040200ULL, 0x8010100228810400ULL,
 	0x2000009044210200ULL, 0x4080008040102101ULL, 0x40002080411d01ULL, 0x2005524060000901ULL, 0x502001008400422ULL,
 	0x489a000810200402ULL, 0x1004400080a13ULL, 0x4000011008020084ULL, 0x26002114058042ULL
+};
+
+const int MoveGen::RookIndexBits[64] = {
+	12, 11, 11, 11, 11, 11, 11, 12,
+	11, 10, 10, 10, 10, 10, 10, 11,
+	11, 10, 10, 10, 10, 10, 10, 11,
+	11, 10, 10, 10, 10, 10, 10, 11,
+	11, 10, 10, 10, 10, 10, 10, 11,
+	11, 10, 10, 10, 10, 10, 10, 11,
+	11, 10, 10, 10, 10, 10, 10, 11,
+	12, 11, 11, 11, 11, 11, 11, 12
 };
 
 const glm::uint64_t MoveGen::BishopMagics[64] = {
@@ -44,17 +57,6 @@ const glm::uint64_t MoveGen::BishopMagics[64] = {
 		0x1000042304105ULL, 0x10008830412a00ULL, 0x2520081090008908ULL, 0x40102000a0a60140ULL,
 };
 
-const int MoveGen::RookIndexBits[64] = {
-	12, 11, 11, 11, 11, 11, 11, 12,
-	11, 10, 10, 10, 10, 10, 10, 11,
-	11, 10, 10, 10, 10, 10, 10, 11,
-	11, 10, 10, 10, 10, 10, 10, 11,
-	11, 10, 10, 10, 10, 10, 10, 11,
-	11, 10, 10, 10, 10, 10, 10, 11,
-	11, 10, 10, 10, 10, 10, 10, 11,
-	12, 11, 11, 11, 11, 11, 11, 12
-};
-
 const int MoveGen::BishopIndexBits[64] = {
 	6, 5, 5, 5, 5, 5, 5, 6,
 	5, 5, 5, 5, 5, 5, 5, 5,
@@ -65,21 +67,6 @@ const int MoveGen::BishopIndexBits[64] = {
 	5, 5, 5, 5, 5, 5, 5, 5,
 	6, 5, 5, 5, 5, 5, 5, 6
 };
-
-uint64_t GetBlockersFromIndex(int Index, uint64_t Mask)
-{
-	uint64_t Blockers = 0ULL;
-	int Bits = BitboardUtils::Count(Mask);
-	for (int i = 0; i < Bits; i++) {
-		int BitPos = BitboardUtils::GetLSBitIndex(Mask);
-		if (Index & (1ULL << i))
-		{
-			Blockers |= (1ULL << BitPos);
-		}
-		BitboardUtils::Pop(Mask, BitPos);
-	}
-	return Blockers;
-}
 
 void MoveGen::Init()
 {
@@ -96,49 +83,25 @@ void MoveGen::GenerateMoves(UChessModel::FBoardState* State)
 		State->BMVision[i] = 0;
 	}
 
+	ComputeVision_Pawn(State);
+	ComputeVision_Rook(State);
+	ComputeVision_Knight(State);
+	ComputeVision_Bishop(State);
+	ComputeVision_Queen(State);
+	ComputeVision_King(State);
+
 	State->NumMoves = 0;
-	for (int i = 0; i < 64; ++i)
-	{
-		int Piece = State->GetPiece(i);
-
-		switch (Piece)
+	uint64_t Occupancy = State->BMWhite | State->BMBlack;
+	BitboardUtils::ForEach(Occupancy, [&](int Source)
 		{
-		case 0:
-			State->BMVision[i] = GetVision_Pawn(i, State);
-			break;
+			uint64_t Friendly = State->GetOwner(Source) == 1 ? State->BMWhite : State->BMBlack;
+			uint64_t Attacks = State->BMVision[Source] & ~(Friendly);
 
-		case 1:
-			State->BMVision[i] = GetVision_Rook(i, State);
-			break;
-
-		case 2:
-			State->BMVision[i] = GetVision_Knight(i, State);
-			break;
-
-		case 3:
-			//State->BMVision[i] = GetVision_Bishop(i, State);
-			break;
-
-		case 4:
-			//State->BMVision[i] = GetVision_Queen(i, State);
-			break;
-
-		case 5:
-			//State->BMVision[i] = GetVision_King(i, State);
-			break;
-		}
-	}
-
-	for (int i = 0; i < 64; ++i)
-	{
-		uint64_t Friendly = State->GetOwner(i) == 1 ? State->BMWhite : State->BMBlack;
-		uint64_t Attacks = State->BMVision[i] & ~(Friendly);
-
-		BitboardUtils::ForEach(Attacks, [&](int Index) {
-			int Move = EncodeMove(i, Index, State->GetPiece(i), 0);
-			State->Moves[State->NumMoves++] = Move;
+			BitboardUtils::ForEach(Attacks, [&](int Target) {
+				int Move = EncodeMove(Source, Target, State->GetPiece(Source), 0);
+				State->Moves[State->NumMoves++] = Move;
+				});
 		});
-	}
 }
 
 int MoveGen::EncodeMove(int source, int target, int piece, int promotion)
@@ -154,6 +117,25 @@ void MoveGen::DecodeMove(int Move, int& Source, int& Target, int& Piece, int& Pr
 	Promotion = (Move & 0xf0000) >> 16;
 }
 
+uint64_t GetBlockersFromIndex(int Index, uint64_t Mask)
+{
+	uint64_t Blockers = 0ULL;
+	int Bits = BitboardUtils::Count(Mask);
+	for (int i = 0; i < Bits; i++) {
+		int BitPos = BitboardUtils::GetLSBitIndex(Mask);
+		if (Index & (1ULL << i))
+		{
+			Blockers |= (1ULL << BitPos);
+		}
+		BitboardUtils::Pop(Mask, BitPos);
+	}
+	return Blockers;
+}
+
+const std::function<void(UChessModel::FBoardState*)> MoveGen::VisionFunctions[6] = {
+
+};
+
 void MoveGen::InitVision_Knight()
 {
 	int x[8] = { 2, 1, -1, -2, -2, -1, 1, 2 };
@@ -168,7 +150,7 @@ void MoveGen::InitVision_Knight()
 
 			if ((tx >= 0 && tx <= 7) && (ty >= 0 && ty <= 7))
 			{
-				KnightVisionMask[i] |= 1ULL << (tx + (ty * 8));
+				VisionMask_Knight[i] |= 1ULL << (tx + (ty * 8));
 			}
 		}
 	}
@@ -178,7 +160,7 @@ void MoveGen::InitVision_Rook()
 {
 	for (int Square = 0; Square < 64; Square++)
 	{
-		RookFullMovementMask[Square] =
+		BlockersMask_Rook[Square] =
 			(Rays::GetRay(Square, ERays::North) & ~Rank8) |
 			(Rays::GetRay(Square, ERays::South) & ~Rank1) |
 			(Rays::GetRay(Square, ERays::East) & ~FileH) |
@@ -191,23 +173,113 @@ void MoveGen::InitVision_Rook()
 		// For all possible blockers for this square
 		for (int BlockerIndex = 0; BlockerIndex < (1 << RookIndexBits[Square]); BlockerIndex++)
 		{
-			uint64_t Blockers = GetBlockersFromIndex(BlockerIndex, RookFullMovementMask[Square]);
-			RookVisionMask[Square][(Blockers * RookMagics[Square]) >> (64 - RookIndexBits[Square])] = ComputeRookAttacks(Square, Blockers);
+			uint64_t Blockers = GetBlockersFromIndex(BlockerIndex, BlockersMask_Rook[Square]);
+
+			uint64_t Attacks = 0;
+			ERays Directions[4] = { ERays::North, ERays::South, ERays::East, ERays::West };
+
+			for (int i = 0; i < 4; ++i)
+			{
+				ERays Direction = Directions[i];
+
+				// Add all direction squares
+				Attacks |= Rays::GetRay(Square, Direction);
+
+				// Check if there are any blockers
+				if (Rays::GetRay(Square, Direction) & Blockers)
+				{
+					// If there are find the first one
+					unsigned long FirstBlocker;
+
+					if (Direction == ERays::North || Direction == ERays::East)
+					{
+						FirstBlocker = BitboardUtils::GetMSBitIndex(Rays::GetRay(Square, Direction) & Blockers);
+					}
+					else
+					{
+						FirstBlocker = BitboardUtils::GetLSBitIndex(Rays::GetRay(Square, Direction) & Blockers);
+					}
+
+					// Remove Squares behind the first blocker
+					Attacks &= ~(Rays::GetRay(FirstBlocker, Direction));
+				}
+			}
+
+			VisionMask_Rook[Square][(Blockers * RookMagics[Square]) >> (64 - RookIndexBits[Square])] = Attacks;
 		}
 	}
 }
 
 void MoveGen::InitVision_Bishop()
 {
+	for (int Square = 0; Square < 64; Square++)
+	{
+		uint64_t BorderSquares = Rank1 | Rank8 | FileA | FileH;
+		BlockersMask_Bishop[Square] =
+			((Rays::GetRay(Square, ERays::NorthEast)) |
+			(Rays::GetRay(Square, ERays::SouthEast)) |
+			(Rays::GetRay(Square, ERays::SouthWest)) |
+			(Rays::GetRay(Square, ERays::NorthWest))) & ~(BorderSquares);
+	}
 
+	// For all squares
+	for (int Square = 0; Square < 64; Square++)
+	{
+		// For all possible blockers for this square
+		for (int BlockerIndex = 0; BlockerIndex < (1 << BishopIndexBits[Square]); BlockerIndex++)
+		{
+			uint64_t Blockers = GetBlockersFromIndex(BlockerIndex, BlockersMask_Bishop[Square]);
+
+			uint64_t Attacks = 0;
+			ERays Directions[4] = { ERays::NorthEast, ERays::SouthEast, ERays::SouthWest, ERays::NorthWest };
+
+			for (int i = 0; i < 4; ++i)
+			{
+				ERays Direction = Directions[i];
+
+				// Add all direction squares
+				Attacks |= Rays::GetRay(Square, Direction);
+
+				// Check if there are any blockers
+				if (Rays::GetRay(Square, Direction) & Blockers)
+				{
+					// If there are find the first one
+					unsigned long FirstBlocker;
+
+					if (Direction == ERays::NorthEast || Direction == ERays::NorthWest)
+					{
+						FirstBlocker = BitboardUtils::GetMSBitIndex(Rays::GetRay(Square, Direction) & Blockers);
+					}
+					else
+					{
+						FirstBlocker = BitboardUtils::GetLSBitIndex(Rays::GetRay(Square, Direction) & Blockers);
+					}
+
+					// Remove Squares behind the first blocker
+					Attacks &= ~(Rays::GetRay(FirstBlocker, Direction));
+				}
+			}
+
+			VisionMask_Bishop[Square][(Blockers * BishopMagics[Square]) >> (64 - BishopIndexBits[Square])] = Attacks;
+		}
+	}
 }
 
 void MoveGen::InitVision_King()
 {
+	for (int i = 0; i < 64; ++i)
+	{
+		uint64_t Square = (1ULL << i);
 
+		uint64_t Attacks = ((Square << 7) | (Square >> 9) | (Square >> 1)) & ~(FileH);
+		Attacks |= ((Square << 9) | (Square >> 7) | (Square << 1)) & ~(FileA);
+		Attacks |= (Square << 8) | (Square >> 8);
+
+		VisionMask_King[i] = Attacks;
+	}
 }
 
-uint64_t MoveGen::GetVision_Pawn(int Square, UChessModel::FBoardState* State)
+void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 {
 	uint64_t WhitePawns = State->BMPieces[0] & State->BMWhite;
 	uint64_t WhitePawnsRank2 = WhitePawns & Rank2;
@@ -308,56 +380,49 @@ uint64_t MoveGen::GetVision_Pawn(int Square, UChessModel::FBoardState* State)
 		}
 		State->BMVision[idx] |= PieceVision;
 		});
-
-	return 0;
 }
 
-uint64_t MoveGen::GetVision_Knight(int Square, UChessModel::FBoardState* State)
+void MoveGen::ComputeVision_Rook(UChessModel::FBoardState* State)
 {
-	return KnightVisionMask[Square];
+	BitboardUtils::ForEach(State->BMPieces[1], [&](int Index) {
+		uint64_t Blockers = (State->BMBlack | State->BMWhite) & BlockersMask_Rook[Index];
+		uint64_t Key = (Blockers * RookMagics[Index]) >> (64 - RookIndexBits[Index]);
+		State->BMVision[Index] = VisionMask_Rook[Index][Key];
+	});
 }
 
-uint64_t MoveGen::GetVision_Rook(int Square, UChessModel::FBoardState* State)
+void MoveGen::ComputeVision_Knight(UChessModel::FBoardState* State)
 {
-	uint64_t Blockers = State->BMBlack | State->BMWhite;
-
-	Blockers &= RookFullMovementMask[Square];
-	uint64_t Key = (Blockers * RookMagics[Square]) >> (64 - RookIndexBits[Square]);
-	return RookVisionMask[Square][Key];
+	BitboardUtils::ForEach(State->BMPieces[2], [&](int Index) {
+		State->BMVision[Index] = VisionMask_Knight[Index];
+	});
 }
 
-uint64_t MoveGen::ComputeRookAttacks(int Square, uint64_t Blockers)
+void MoveGen::ComputeVision_Bishop(UChessModel::FBoardState* State)
 {
-	uint64_t Attacks = 0;
+	BitboardUtils::ForEach(State->BMPieces[3], [&](int Index) {
+		uint64_t Blockers = (State->BMBlack | State->BMWhite) & BlockersMask_Bishop[Index];
+		uint64_t Key = (Blockers * BishopMagics[Index]) >> (64 - BishopIndexBits[Index]);
+		State->BMVision[Index] = VisionMask_Bishop[Index][Key];
+	});
+}
 
-	ERays Directions[4] = { ERays::North, ERays::South, ERays::East, ERays::West };
+void MoveGen::ComputeVision_Queen(UChessModel::FBoardState* State)
+{
+	BitboardUtils::ForEach(State->BMPieces[4], [&](int Index) {
+		uint64_t BlockersRook = (State->BMBlack | State->BMWhite) & BlockersMask_Rook[Index];
+		uint64_t Key = (BlockersRook * RookMagics[Index]) >> (64 - RookIndexBits[Index]);
+		State->BMVision[Index] |= VisionMask_Rook[Index][Key];
 
-	for (int i = 0; i < 4; ++i)
-	{
-		ERays Direction = Directions[i];
+		uint64_t BlockersBishop = (State->BMBlack | State->BMWhite) & BlockersMask_Bishop[Index];
+		Key = (BlockersBishop * BishopMagics[Index]) >> (64 - BishopIndexBits[Index]);
+		State->BMVision[Index] |= VisionMask_Bishop[Index][Key];
+	});
+}
 
-		// Add all direction squares
-		Attacks |= Rays::GetRay(Square, Direction);
-
-		// Check if there are any blockers
-		if (Rays::GetRay(Square, Direction) & Blockers)
-		{
-			// If there are find the first one
-			unsigned long FirstBlocker;
-
-			if (Direction == ERays::North || Direction == ERays::East)
-			{
-				FirstBlocker = BitboardUtils::GetMSBitIndex(Rays::GetRay(Square, Direction) & Blockers);
-			}
-			else
-			{
-				FirstBlocker = BitboardUtils::GetLSBitIndex(Rays::GetRay(Square, Direction) & Blockers);
-			}
-
-			// Remove Squares behind the first blocker
-			Attacks &= ~(Rays::GetRay(FirstBlocker, Direction));
-		}
-	}
-
-	return Attacks;
+void MoveGen::ComputeVision_King(UChessModel::FBoardState* State)
+{
+	BitboardUtils::ForEach(State->BMPieces[5], [&](int Index) {
+		State->BMVision[Index] = VisionMask_King[Index];
+	});
 }
