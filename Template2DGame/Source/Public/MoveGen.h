@@ -41,7 +41,5 @@ private:
 
 	static const int RookIndexBits[64];
 	static const int BishopIndexBits[64];
-
-	static const std::function<void(UChessModel::FBoardState*)> VisionFunctions[6];
 };
 

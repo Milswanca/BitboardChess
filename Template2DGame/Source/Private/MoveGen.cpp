@@ -132,10 +132,6 @@ uint64_t GetBlockersFromIndex(int Index, uint64_t Mask)
 	return Blockers;
 }
 
-const std::function<void(UChessModel::FBoardState*)> MoveGen::VisionFunctions[6] = {
-
-};
-
 void MoveGen::InitVision_Knight()
 {
 	int x[8] = { 2, 1, -1, -2, -2, -1, 1, 2 };
