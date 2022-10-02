@@ -19,19 +19,17 @@ void UChessController::UpdateController(UChessModel* Model)
 
 	glm::vec3 WorldMouse = GetCursorWorldPosition();
 
-	uchar X;
-	uchar Y;
-	if (UChessStatics::WorldToIndex(WorldMouse, X, Y))
+	int Index;
+	if (UChessStatics::WorldToIndex(WorldMouse, Index))
 	{
 		if (!bLastMouseState && bState)
 		{
-			MouseDownGridX = X;
-			MouseDownGridY = Y;
+			MouseDownSquare = Index;
 		}
 		else if (bLastMouseState && !bState)
 		{
 			int Move;
-			if (Model->FindMove(MouseDownGridX + MouseDownGridY * 8, X + Y * 8, Move))
+			if (Model->FindMove(MouseDownSquare, Index, Move))
 			{
 				Model->DoMove(Move);
 			}

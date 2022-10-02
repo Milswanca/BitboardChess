@@ -36,7 +36,7 @@ void URendererImmediateGL::End()
 	UObject::End();
 }
 
-void URendererImmediateGL::DrawSprite(USprite* Sprite, UMaterial* Material, const glm::mat4& Transform)
+void URendererImmediateGL::DrawSprite(USprite* Sprite, UMaterial* Material, const glm::vec4& Tint, const glm::mat4& Transform)
 {
 	if (Sprite != nullptr)
 	{
@@ -53,6 +53,7 @@ void URendererImmediateGL::DrawSprite(USprite* Sprite, UMaterial* Material, cons
 			UMaterial* Mat = Material == nullptr ? SpriteDefaultMaterial : Material;
 			Mat->SetMat4("gProjectionView", ProjectionView);
 			Mat->SetMat4("gModel", Transform * PixelScale);
+			Mat->SetVector4("gTint", Tint);
 			Mat->SetTexture("gSprite", Sprite != nullptr ? Sprite->GetTexture() : nullptr);
 			Mat->Bind();
 

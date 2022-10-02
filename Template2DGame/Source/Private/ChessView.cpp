@@ -7,6 +7,9 @@
 #include "glm/glm.hpp"
 #include <glm/gtx/transform.hpp>
 
+#include "Rendering/Shader.h"
+#include "Rendering/Material.h"
+
 void UChessView::Begin()
 {
 	WhitePieces[0] = USprite::Create("Game/Sprites/spr_pawn_white.png");
@@ -25,6 +28,8 @@ void UChessView::Begin()
 	SpriteBoardLight = USprite::Create("Game/Sprites/spr_square_brown_light.png");
 	SpriteBoardDark = USprite::Create("Game/Sprites/spr_square_brown_dark.png");
 
+	WhiteSquare = USprite::Create(UChessStatics::SquareSize, UChessStatics::SquareSize);
+
 	SpriteBoardLight->OverrideDimensions(UChessStatics::SquareSize, UChessStatics::SquareSize);
 	SpriteBoardDark->OverrideDimensions(UChessStatics::SquareSize, UChessStatics::SquareSize);
 
@@ -33,6 +38,13 @@ void UChessView::Begin()
 		WhitePieces[i]->OverrideDimensions(UChessStatics::SquareSize, UChessStatics::SquareSize);
 		BlackPieces[i]->OverrideDimensions(UChessStatics::SquareSize, UChessStatics::SquareSize);
 	}
+
+	UShader::FCreateShaderParams Params;
+	Params.VertexShader = "Engine/Shaders/SpriteVertex.shader";
+	Params.FragmentShader = "Engine/Shaders/SpriteFragment.shader";
+	UShader* SpriteDefaultShader = UShader::Create(Params);
+
+	SpriteMaterial = UMaterial::Create(SpriteDefaultShader);
 }
 
 void UChessView::End()
@@ -47,18 +59,13 @@ void UChessView::RenderBoard(UChessModel* Model)
 	{
 		uchar x = i % 8;
 		uchar y = i / 8;
-
 		USprite* Spr = (x + y) % 2 ? SpriteBoardLight : SpriteBoardDark;
-		glm::vec3 WorldPos = UChessStatics::IndexToWorld(x, y);
-		GetImmediateRenderer()->DrawSprite(Spr, nullptr, glm::translate(glm::identity<glm::mat4>(), glm::vec3(WorldPos.x, WorldPos.y, -1.0f)));
+		RenderSprite(Spr, i, 0);
 	}
 
 	// Render Pieces
 	for (uchar i = 0; i < 64; ++i)
 	{
-		uchar x = i % 8;
-		uchar y = i / 8;
-
 		if (Model->GetOwner(i) == 0)
 			continue;
 
@@ -66,7 +73,33 @@ void UChessView::RenderBoard(UChessModel* Model)
 		USprite** Sprites = Owner == 1 ? WhitePieces : BlackPieces;
 		USprite* Spr = Sprites[Model->GetPiece(i)];
 
-		glm::vec3 WorldPos = UChessStatics::IndexToWorld(x, y);
-		GetImmediateRenderer()->DrawSprite(Spr, nullptr, glm::translate(glm::identity<glm::mat4>(), WorldPos));
+		RenderSprite(Spr, i, 1);
+	}
+
+	DebugRenderCheckMask(Model);
+}
+
+void UChessView::RenderSprite(USprite* Sprite, int Square, int Order, const glm::vec4& Tint)
+{
+	glm::vec3 WorldPos = UChessStatics::IndexToWorld(Square);
+	GetImmediateRenderer()->DrawSprite(Sprite, nullptr, Tint, glm::translate(glm::identity<glm::mat4>(), glm::vec3(WorldPos.x, WorldPos.y, -Order)));
+}
+
+void UChessView::DebugRenderCheckMask(UChessModel* Model)
+{
+	uint64_t CheckMaskWhite = Model->GetState()->BMCheckMaskWhite;
+	uint64_t CheckMaskBlack = Model->GetState()->BMCheckMaskBlack;
+
+	for (int i = 0; i < 64; ++i)
+	{
+		if (CheckMaskWhite != 0xFFFFFFFFFFFFFFFF && (CheckMaskWhite & (1ULL << i)) != 0)
+		{
+			RenderSprite(WhiteSquare, i, 2, glm::vec4(1.0, 1.0f, 1.0f, 0.5f));
+		}
+
+		if (CheckMaskBlack != 0xFFFFFFFFFFFFFFFF && (CheckMaskBlack & (1ULL << i)) != 0)
+		{
+			RenderSprite(WhiteSquare, i, 2, glm::vec4(0.0, 0.0f, 0.0f, 0.5f));
+		}
 	}
 }

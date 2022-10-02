@@ -14,6 +14,8 @@ public:
 	static void DecodeMove(int Move, int& Source, int& Target, int& Piece, int& Promotion);
 
 private:
+	static void InitPathToSquare();
+
 	static void InitVision_Knight();
 	static void InitVision_Rook();
 	static void InitVision_Bishop();
@@ -26,7 +28,13 @@ private:
 	static void ComputeVision_Queen(UChessModel::FBoardState* State);
 	static void ComputeVision_King(UChessModel::FBoardState* State);
 
+	static void GenerateCheckMask(UChessModel::FBoardState* State);
+	static void WriteVision_White(UChessModel::FBoardState* State, int Square, uint64_t Vision);
+	static void WriteVision_Black(UChessModel::FBoardState* State, int Square, uint64_t Vision);
+
 private:
+	static uint64_t PathToSquare[64][64];
+
 	static uint64_t VisionMask_King[64];
 	static uint64_t VisionMask_Knight[64];
 	static uint64_t VisionMask_Rook[64][4096];

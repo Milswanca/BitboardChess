@@ -19,14 +19,19 @@ public:
 
 		// Pieces
 		uint64_t BMPieces[6];
-		uint64_t BMVision[64];
+		uint64_t BMSlidingPieces;
+
+		// Vision
+		uint64_t Targeting[64];
+		uint64_t TargetedBy[64];
+		uint64_t BMVisionWhite;
+		uint64_t BMVisionBlack;
+		uint64_t BMCheckMaskWhite;
+		uint64_t BMCheckMaskBlack;
 
 		// Colors
 		uint64_t BMWhite;
 		uint64_t BMBlack;
-
-		// Checks
-		uint64_t BMCheck;
 
 		// Pins
 		uint64_t BMHPin;
@@ -53,6 +58,8 @@ public:
 	void GenerateMoves();
 	int GetPiece(int Square) const;
 	int GetOwner(int Square) const;
+
+	FBoardState* GetState() const;
 
 private:
 	FBoardState* State;

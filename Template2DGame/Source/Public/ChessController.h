@@ -18,6 +18,5 @@ public:
 private:
 	bool bLastMouseState;
 
-	unsigned int MouseDownGridX;
-	unsigned int MouseDownGridY;
+	unsigned int MouseDownSquare;
 };

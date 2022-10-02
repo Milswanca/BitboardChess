@@ -11,6 +11,13 @@ USprite* USprite::Create(const std::string& File)
 	return Sprite;
 }
 
+USprite* USprite::Create(unsigned int Width, unsigned int Height)
+{
+	USprite* Sprite = UEngine::Get()->NewObject<USprite>();
+	Sprite->Texture = UTexture2D::Create(Width, Height, UTexture::ETextureFormats::RGBA8);
+	return Sprite;
+}
+
 void USprite::Begin()
 {
 	UObject::Begin();

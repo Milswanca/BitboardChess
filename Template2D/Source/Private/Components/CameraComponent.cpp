@@ -12,7 +12,7 @@ void UCameraComponent::Begin()
 	bUseWindowAspect = true;
 	ProjectionType = EProjectionTypes::Perspective;
 	Near = 0.03f;
-	Far = 10.0f;
+	Far = 1000.0f;
 	FOV = 45.0f;
 	Aspect = 1.0f;
 	OrthoWidth = 300;

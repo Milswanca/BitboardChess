@@ -15,7 +15,7 @@ void AApplication::Begin()
 	Camera = GetWorld()->SpawnActor<ACameraActor>();
 	Camera->GetCameraComponent()->SetProjectionType(EProjectionTypes::Orthographic);
 	Camera->GetCameraComponent()->SetAsMain();
-	Camera->GetCameraComponent()->TranslateLocal(GetForward() * -1.0f);
+	Camera->GetCameraComponent()->TranslateLocal(GetForward() * -100.0f);
 	Camera->GetCameraComponent()->SetOrthoSize(8 * UChessStatics::SquareSize, 8 * UChessStatics::SquareSize);
 	Camera->GetCameraComponent()->SetOrthoFitMode(EOrthoFitMode::Fit);
 

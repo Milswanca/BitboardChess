@@ -9,6 +9,7 @@ class USprite : public UObject
 {
 public:
 	static USprite* Create(const std::string& File);
+	static USprite* Create(unsigned int Width, unsigned int Height);
 
 protected:
 	IMPLEMENT_CONSTRUCTOR(USprite, UObject);

@@ -5,6 +5,7 @@
 
 class USprite;
 class UChessModel;
+class UMaterial;
 
 class UChessView : public UObject
 {
@@ -16,8 +17,13 @@ protected:
 
 public:
 	void RenderBoard(UChessModel* Model);
+	void DebugRenderCheckMask(UChessModel* Model);
 
 private:
+	void RenderSprite(USprite* Sprite, int Square, int Order, const glm::vec4& Tint = glm::vec4(1.0f));
+
+	USprite* WhiteSquare;
+	UMaterial* SpriteMaterial;
 	USprite* WhitePieces[6];
 	USprite* BlackPieces[6];
 	USprite* SpriteBoardLight;

@@ -6,6 +6,8 @@
 #include <iostream>
 #include <intrin.h>
 
+uint64_t MoveGen::PathToSquare[64][64];
+
 uint64_t MoveGen::VisionMask_Knight[64];
 uint64_t MoveGen::VisionMask_Rook[64][4096];
 uint64_t MoveGen::VisionMask_Bishop[64][1024];
@@ -68,55 +70,6 @@ const int MoveGen::BishopIndexBits[64] = {
 	6, 5, 5, 5, 5, 5, 5, 6
 };
 
-void MoveGen::Init()
-{
-	InitVision_Knight();
-	InitVision_Rook();
-	InitVision_Bishop();
-	InitVision_King();
-}
-
-void MoveGen::GenerateMoves(UChessModel::FBoardState* State)
-{
-	for (int i = 0; i < 64; ++i)
-	{
-		State->BMVision[i] = 0;
-	}
-
-	ComputeVision_Pawn(State);
-	ComputeVision_Rook(State);
-	ComputeVision_Knight(State);
-	ComputeVision_Bishop(State);
-	ComputeVision_Queen(State);
-	ComputeVision_King(State);
-
-	State->NumMoves = 0;
-	uint64_t Occupancy = State->BMWhite | State->BMBlack;
-	BitboardUtils::ForEach(Occupancy, [&](int Source)
-		{
-			uint64_t Friendly = State->GetOwner(Source) == 1 ? State->BMWhite : State->BMBlack;
-			uint64_t Attacks = State->BMVision[Source] & ~(Friendly);
-
-			BitboardUtils::ForEach(Attacks, [&](int Target) {
-				int Move = EncodeMove(Source, Target, State->GetPiece(Source), 0);
-				State->Moves[State->NumMoves++] = Move;
-				});
-		});
-}
-
-int MoveGen::EncodeMove(int source, int target, int piece, int promotion)
-{
-	return (source) | (target << 6) | (piece << 12) | (promotion << 16);
-}
-
-void MoveGen::DecodeMove(int Move, int& Source, int& Target, int& Piece, int& Promotion)
-{
-	Source = Move & 0x3f;
-	Target = (Move & 0xfc0) >> 6;
-	Piece = (Move & 0xf000) >> 12;
-	Promotion = (Move & 0xf0000) >> 16;
-}
-
 uint64_t GetBlockersFromIndex(int Index, uint64_t Mask)
 {
 	uint64_t Blockers = 0ULL;
@@ -130,6 +83,42 @@ uint64_t GetBlockersFromIndex(int Index, uint64_t Mask)
 		BitboardUtils::Pop(Mask, BitPos);
 	}
 	return Blockers;
+}
+
+void MoveGen::Init()
+{
+	InitPathToSquare();
+	InitVision_Knight();
+	InitVision_Rook();
+	InitVision_Bishop();
+	InitVision_King();
+}
+
+void MoveGen::InitPathToSquare()
+{
+	ERays OppositeDirections[8] = { ERays::South, ERays::SouthWest, ERays::West, ERays::NorthWest, ERays::North, ERays::NorthEast, ERays::East, ERays::SouthEast };
+
+	for (int i = 0; i < 64; ++i)
+	{
+		for (int j = 0; j < 64; ++j)
+		{
+			uint64_t Path = 0ULL;
+			for (int d = 0; d < 8; ++d)
+			{
+				ERays Direction = static_cast<ERays>(d);
+				ERays Opposite = OppositeDirections[d];
+
+				uint64_t Ray = Rays::GetRay(i, Direction);
+				uint64_t RayOpposite = Rays::GetRay(j, Opposite);
+
+				// Get the overlap between 
+				//	Ray Opposite
+				//	Ray + Source Square
+				Path |= (RayOpposite & (Ray | (1ULL << i)));
+			}
+			PathToSquare[i][j] = Path;
+		}
+	}
 }
 
 void MoveGen::InitVision_Knight()
@@ -213,9 +202,9 @@ void MoveGen::InitVision_Bishop()
 		uint64_t BorderSquares = Rank1 | Rank8 | FileA | FileH;
 		BlockersMask_Bishop[Square] =
 			((Rays::GetRay(Square, ERays::NorthEast)) |
-			(Rays::GetRay(Square, ERays::SouthEast)) |
-			(Rays::GetRay(Square, ERays::SouthWest)) |
-			(Rays::GetRay(Square, ERays::NorthWest))) & ~(BorderSquares);
+				(Rays::GetRay(Square, ERays::SouthEast)) |
+				(Rays::GetRay(Square, ERays::SouthWest)) |
+				(Rays::GetRay(Square, ERays::NorthWest))) & ~(BorderSquares);
 	}
 
 	// For all squares
@@ -275,6 +264,91 @@ void MoveGen::InitVision_King()
 	}
 }
 
+void MoveGen::GenerateMoves(UChessModel::FBoardState* State)
+{
+	State->BMVisionBlack = 0ULL;
+	State->BMVisionWhite = 0ULL;
+	for (int i = 0; i < 64; ++i)
+	{
+		State->Targeting[i] = 0ULL;
+		State->TargetedBy[i] = 0ULL;
+	}
+
+	ComputeVision_Pawn(State);
+	ComputeVision_Rook(State);
+	ComputeVision_Knight(State);
+	ComputeVision_Bishop(State);
+	ComputeVision_Queen(State);
+	ComputeVision_King(State);
+
+	GenerateCheckMask(State);
+
+	State->NumMoves = 0;
+
+	uint64_t BlackKing = State->BMBlack & State->BMPieces[5];
+	uint64_t BlackPieces = State->BMBlack & ~(State->BMPieces[5]);
+
+	uint64_t WhiteKing = State->BMWhite & State->BMPieces[5];
+	uint64_t WhitePieces = State->BMWhite & ~(State->BMPieces[5]);
+
+	// Black Moves (No King)
+	BitboardUtils::ForEach(BlackPieces, [&](int Source)
+	{
+		uint64_t Attacks = State->Targeting[Source] & ~(State->BMBlack) & State->BMCheckMaskBlack;
+
+		BitboardUtils::ForEach(Attacks, [&](int Target) 
+		{
+			int Move = EncodeMove(Source, Target, State->GetPiece(Source), 0);
+			State->Moves[State->NumMoves++] = Move;
+		});
+	});
+
+	// Black King Moves
+	int BlackKingSquare = BitboardUtils::GetLSBitIndex(BlackKing);
+	uint64_t BlackKingMoves = State->Targeting[BlackKingSquare] & ~(State->BMBlack) & ~(State->BMVisionWhite);
+
+	BitboardUtils::ForEach(BlackKingMoves, [&](int Target) 
+	{
+		int Move = EncodeMove(BlackKingSquare, Target, 5, 0);
+		State->Moves[State->NumMoves++] = Move;
+	});
+
+	// White Moves (No King)
+	BitboardUtils::ForEach(WhitePieces, [&](int Source)
+	{
+		uint64_t Attacks = State->Targeting[Source] & ~(State->BMWhite) & State->BMCheckMaskWhite;
+
+		BitboardUtils::ForEach(Attacks, [&](int Target) 
+		{
+			int Move = EncodeMove(Source, Target, State->GetPiece(Source), 0);
+			State->Moves[State->NumMoves++] = Move;
+		});
+	});
+
+	// White King Moves
+	int WhiteKingSquare = BitboardUtils::GetLSBitIndex(WhiteKing);
+	uint64_t WhiteKingMoves = State->Targeting[WhiteKingSquare] & ~(State->BMWhite) & ~(State->BMVisionBlack);
+
+	BitboardUtils::ForEach(WhiteKingMoves, [&](int Target) 
+	{
+		int Move = EncodeMove(WhiteKingSquare, Target, 5, 0);
+		State->Moves[State->NumMoves++] = Move;
+	});
+}
+
+int MoveGen::EncodeMove(int source, int target, int piece, int promotion)
+{
+	return (source) | (target << 6) | (piece << 12) | (promotion << 16);
+}
+
+void MoveGen::DecodeMove(int Move, int& Source, int& Target, int& Piece, int& Promotion)
+{
+	Source = Move & 0x3f;
+	Target = (Move & 0xfc0) >> 6;
+	Piece = (Move & 0xf000) >> 12;
+	Promotion = (Move & 0xf0000) >> 16;
+}
+
 void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 {
 	uint64_t WhitePawns = State->BMPieces[0] & State->BMWhite;
@@ -290,7 +364,7 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 		{
 			BitboardUtils::Set(PieceVision, idx + 8);
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_White(State, idx, PieceVision);
 		});
 
 	// Double Moves - White
@@ -304,7 +378,7 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 				BitboardUtils::Set(PieceVision, idx + 16);
 			}
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_White(State, idx, PieceVision);
 		});
 
 	// Attack Left Moves - White
@@ -314,7 +388,7 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 		{
 			BitboardUtils::Set(PieceVision, idx + 7);
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_White(State, idx, PieceVision);
 		});
 
 	// Attack Right Moves - White
@@ -324,7 +398,7 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 		{
 			BitboardUtils::Set(PieceVision, idx + 9);
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_White(State, idx, PieceVision);
 		});
 
 	uint64_t BlackPawns = State->BMPieces[0] & State->BMBlack;
@@ -340,7 +414,7 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 		{
 			BitboardUtils::Set(PieceVision, idx - 8);
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_Black(State, idx, PieceVision);
 		});
 
 	// Double Moves - Black
@@ -354,7 +428,7 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 				BitboardUtils::Set(PieceVision, idx - 16);
 			}
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_Black(State, idx, PieceVision);
 		});
 
 	// Attack Left Moves - Black
@@ -364,7 +438,7 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 		{
 			BitboardUtils::Set(PieceVision, idx - 9);
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_Black(State, idx, PieceVision);
 		});
 
 	// Attack Right Moves - Black
@@ -374,51 +448,171 @@ void MoveGen::ComputeVision_Pawn(UChessModel::FBoardState* State)
 		{
 			BitboardUtils::Set(PieceVision, idx - 7);
 		}
-		State->BMVision[idx] |= PieceVision;
+		WriteVision_Black(State, idx, PieceVision);
 		});
 }
 
 void MoveGen::ComputeVision_Rook(UChessModel::FBoardState* State)
 {
-	BitboardUtils::ForEach(State->BMPieces[1], [&](int Index) {
+	BitboardUtils::ForEach(State->BMPieces[1] & State->BMWhite, [&](int Index) {
 		uint64_t Blockers = (State->BMBlack | State->BMWhite) & BlockersMask_Rook[Index];
 		uint64_t Key = (Blockers * RookMagics[Index]) >> (64 - RookIndexBits[Index]);
-		State->BMVision[Index] = VisionMask_Rook[Index][Key];
-	});
+		WriteVision_White(State, Index, VisionMask_Rook[Index][Key]);
+		});
+
+	BitboardUtils::ForEach(State->BMPieces[1] & State->BMBlack, [&](int Index) {
+		uint64_t Blockers = (State->BMBlack | State->BMWhite) & BlockersMask_Rook[Index];
+		uint64_t Key = (Blockers * RookMagics[Index]) >> (64 - RookIndexBits[Index]);
+		WriteVision_Black(State, Index, VisionMask_Rook[Index][Key]);
+		});
 }
 
 void MoveGen::ComputeVision_Knight(UChessModel::FBoardState* State)
 {
-	BitboardUtils::ForEach(State->BMPieces[2], [&](int Index) {
-		State->BMVision[Index] = VisionMask_Knight[Index];
-	});
+	BitboardUtils::ForEach(State->BMPieces[2] & State->BMWhite, [&](int Index) {
+		WriteVision_White(State, Index, VisionMask_Knight[Index]);
+		});
+
+	BitboardUtils::ForEach(State->BMPieces[2] & State->BMBlack, [&](int Index) {
+		WriteVision_Black(State, Index, VisionMask_Knight[Index]);
+		});
 }
 
 void MoveGen::ComputeVision_Bishop(UChessModel::FBoardState* State)
 {
-	BitboardUtils::ForEach(State->BMPieces[3], [&](int Index) {
+	BitboardUtils::ForEach(State->BMPieces[3] & State->BMWhite, [&](int Index) {
 		uint64_t Blockers = (State->BMBlack | State->BMWhite) & BlockersMask_Bishop[Index];
 		uint64_t Key = (Blockers * BishopMagics[Index]) >> (64 - BishopIndexBits[Index]);
-		State->BMVision[Index] = VisionMask_Bishop[Index][Key];
-	});
+		WriteVision_White(State, Index, VisionMask_Bishop[Index][Key]);
+		});
+
+	BitboardUtils::ForEach(State->BMPieces[3] & State->BMBlack, [&](int Index) {
+		uint64_t Blockers = (State->BMBlack | State->BMWhite) & BlockersMask_Bishop[Index];
+		uint64_t Key = (Blockers * BishopMagics[Index]) >> (64 - BishopIndexBits[Index]);
+		WriteVision_Black(State, Index, VisionMask_Bishop[Index][Key]);
+		});
 }
 
 void MoveGen::ComputeVision_Queen(UChessModel::FBoardState* State)
 {
-	BitboardUtils::ForEach(State->BMPieces[4], [&](int Index) {
+	BitboardUtils::ForEach(State->BMPieces[4] & State->BMWhite, [&](int Index) {
 		uint64_t BlockersRook = (State->BMBlack | State->BMWhite) & BlockersMask_Rook[Index];
 		uint64_t Key = (BlockersRook * RookMagics[Index]) >> (64 - RookIndexBits[Index]);
-		State->BMVision[Index] |= VisionMask_Rook[Index][Key];
+		WriteVision_White(State, Index, VisionMask_Rook[Index][Key]);
 
 		uint64_t BlockersBishop = (State->BMBlack | State->BMWhite) & BlockersMask_Bishop[Index];
 		Key = (BlockersBishop * BishopMagics[Index]) >> (64 - BishopIndexBits[Index]);
-		State->BMVision[Index] |= VisionMask_Bishop[Index][Key];
-	});
+		WriteVision_White(State, Index, VisionMask_Bishop[Index][Key]);
+		});
+
+	BitboardUtils::ForEach(State->BMPieces[4] & State->BMBlack, [&](int Index) {
+		uint64_t BlockersRook = (State->BMBlack | State->BMWhite) & BlockersMask_Rook[Index];
+		uint64_t Key = (BlockersRook * RookMagics[Index]) >> (64 - RookIndexBits[Index]);
+		WriteVision_Black(State, Index, VisionMask_Rook[Index][Key]);
+
+		uint64_t BlockersBishop = (State->BMBlack | State->BMWhite) & BlockersMask_Bishop[Index];
+		Key = (BlockersBishop * BishopMagics[Index]) >> (64 - BishopIndexBits[Index]);
+		WriteVision_Black(State, Index, VisionMask_Bishop[Index][Key]);
+		});
 }
 
 void MoveGen::ComputeVision_King(UChessModel::FBoardState* State)
 {
-	BitboardUtils::ForEach(State->BMPieces[5], [&](int Index) {
-		State->BMVision[Index] = VisionMask_King[Index];
+	BitboardUtils::ForEach(State->BMPieces[5] & State->BMWhite, [&](int Index) {
+		WriteVision_White(State, Index, VisionMask_King[Index]);
+		});
+
+	BitboardUtils::ForEach(State->BMPieces[5] & State->BMBlack, [&](int Index) {
+		WriteVision_Black(State, Index, VisionMask_King[Index]);
+		});
+}
+
+void MoveGen::GenerateCheckMask(UChessModel::FBoardState* State)
+{
+	State->BMCheckMaskWhite = 0ULL;
+	State->BMCheckMaskBlack = 0ULL;
+
+	uint64_t WhiteKing = State->BMWhite & State->BMPieces[5];
+	uint64_t BlackKing = State->BMBlack & State->BMPieces[5];
+	int WhiteKingSquare = BitboardUtils::GetLSBitIndex(WhiteKing);
+	int BlackKingSquare = BitboardUtils::GetLSBitIndex(BlackKing);
+
+	uint64_t WhiteSlidingPieces = State->BMWhite & State->BMSlidingPieces;
+	uint64_t BlackSlidingPieces = State->BMBlack & State->BMSlidingPieces;
+	uint64_t WhiteJumpingPieces = State->BMWhite & ~(State->BMSlidingPieces);
+	uint64_t BlackJumpingPieces = State->BMBlack & ~(State->BMSlidingPieces);
+
+	int NumWhiteKingTargets = BitboardUtils::Count(State->TargetedBy[WhiteKingSquare] & State->BMBlack);
+	int NumBlackKingTargets = BitboardUtils::Count(State->TargetedBy[BlackKingSquare] & State->BMWhite);
+
+	// If your king is targeted by 2 pieces, your only option is to move king
+	if (NumBlackKingTargets <= 1)
+	{
+		// Compute White Sliding Piece Checks
+		BitboardUtils::ForEach(WhiteSlidingPieces, [&](int Index)
+			{
+				uint64_t Vision = State->Targeting[Index] | (1ULL << Index);
+				uint64_t Path = PathToSquare[Index][BlackKingSquare];
+
+				if ((Vision & BlackKing) != 0)
+				{
+					State->BMCheckMaskBlack |= Vision & Path;
+				}
+			});
+
+		// Compute White Jumping Pieces
+		BitboardUtils::ForEach(WhiteJumpingPieces, [&](int Index)
+			{
+				uint64_t Vision = State->Targeting[Index] | (1ULL << Index);
+				uint64_t Path = PathToSquare[Index][BlackKingSquare];
+				State->BMCheckMaskBlack |= (uint64_t((Vision & BlackKing) > 0) << Index);
+			});
+
+		State->BMCheckMaskBlack = State->BMCheckMaskBlack <= 0ULL ? 0xFFFFFFFFFFFFFFFF : State->BMCheckMaskBlack;
+	}
+
+	if (NumWhiteKingTargets <= 1)
+	{
+		// Compute White Sliding Piece Checks
+		BitboardUtils::ForEach(BlackSlidingPieces, [&](int Index)
+			{
+				uint64_t Vision = State->Targeting[Index] | (1ULL << Index);
+				uint64_t Path = PathToSquare[Index][WhiteKingSquare];
+
+				if ((Vision & WhiteKing) != 0)
+				{
+					State->BMCheckMaskWhite |= Vision & Path;
+				}
+			});
+
+		// Compute White Jumping Pieces
+		BitboardUtils::ForEach(BlackJumpingPieces, [&](int Index)
+			{
+				uint64_t Vision = State->Targeting[Index] | (1ULL << Index);
+				uint64_t Path = PathToSquare[Index][WhiteKingSquare];
+				State->BMCheckMaskBlack |= (uint64_t((Vision & WhiteKing) > 0) << Index);
+			});
+
+		State->BMCheckMaskWhite = State->BMCheckMaskWhite <= 0ULL ? 0xFFFFFFFFFFFFFFFF : State->BMCheckMaskWhite;
+	}
+}
+
+void MoveGen::WriteVision_White(UChessModel::FBoardState* State, int Source, uint64_t Vision)
+{
+	State->BMVisionWhite |= Vision;
+	State->Targeting[Source] |= Vision;
+
+	BitboardUtils::ForEach(Vision, [&](int idx) {
+		State->TargetedBy[idx] |= (1ULL << Source);
 	});
+}
+
+void MoveGen::WriteVision_Black(UChessModel::FBoardState* State, int Source, uint64_t Vision)
+{
+	State->BMVisionBlack |= Vision;
+	State->Targeting[Source] |= Vision;
+
+	BitboardUtils::ForEach(Vision, [&](int idx) {
+		State->TargetedBy[idx] |= (1ULL << Source);
+		});
 }

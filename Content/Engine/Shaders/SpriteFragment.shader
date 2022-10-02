@@ -9,9 +9,10 @@ in VS_OUT
 
 // Diffuse
 uniform sampler2D gSprite;
+uniform vec4 gTint;
 
 void main()
 {
     vec4 result = texture(gSprite, fs_in.UV);
-    Color_FS_out = result;
+    Color_FS_out = result * gTint;
 }

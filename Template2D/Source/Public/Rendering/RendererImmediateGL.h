@@ -15,7 +15,7 @@ protected:
 	virtual void End() override;
 
 public:
-	virtual void DrawSprite(USprite* Sprite, UMaterial* Material, const glm::mat4& Transform) override;
+	virtual void DrawSprite(USprite* Sprite, UMaterial* Material, const glm::vec4& Tint, const glm::mat4& Transform) override;
 
 private:
 	static UMesh* QuadMesh;

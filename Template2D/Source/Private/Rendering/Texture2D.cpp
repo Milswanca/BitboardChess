@@ -33,6 +33,23 @@ UTexture2D* UTexture2D::Create(const std::string& File)
 	return NewTexture;
 }
 
+UTexture2D* UTexture2D::Create(unsigned int Width, unsigned int Height, ETextureFormats Format)
+{
+	UTexture2D* NewTexture = UEngine::Get()->NewObject<UTexture2D>();
+
+	FTextureData* Data = NewTexture->GetTextureData();
+	Data->bGenerateMips = false;
+	Data->Width = Width;
+	Data->Height = Height;
+	Data->Format = Format;
+	Data->Data = new unsigned char[Width * Height * 4];
+	memset(Data->Data, 255, Width * Height * 4);
+
+	NewTexture->Build();
+
+	return NewTexture;
+}
+
 void UTexture2D::Build()
 {
 	FTextureData* TextureData = GetTextureData();

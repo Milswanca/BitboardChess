@@ -16,14 +16,19 @@ UChessModel::FBoardState::FBoardState()
 	BMPieces[3] = C1 | F1 | C8 | F8;
 	BMPieces[4] = D1 | D8;
 	BMPieces[5] = E1 | E8;
+	BMSlidingPieces = A1 | C1 | D1 | F1 | H1 | A8 | C8 | D8 | F8 | H8;
+
+	BMVisionWhite = 0ULL;
+	BMVisionBlack = 0ULL;
+	BMCheckMaskWhite = 0ULL;
+	BMCheckMaskBlack = 0ULL;
 
 	BMWhite = Rank1 | Rank2;
 	BMBlack = Rank7 | Rank8;
-	BMCheck = 0;
-	BMHPin = 0;
-	BMVPin = 0;
-	BMD1Pin = 0;
-	BMD2Pin = 0;
+	BMHPin = 0ULL;
+	BMVPin = 0ULL;
+	BMD1Pin = 0ULL;
+	BMD2Pin = 0ULL;
 
 	NumMoves = 0;
 	Turn = EChessColors::White;
@@ -85,11 +90,11 @@ bool UChessModel::DoMove(int Move)
 	}
 
 	BitboardUtils::Move(State->BMPieces[Piece], Source, Target);
+	BitboardUtils::Move(State->BMSlidingPieces, Source, Target);
 	BitboardUtils::Move(State->BMWhite, Source, Target);
 	BitboardUtils::Move(State->BMBlack, Source, Target);
 
 	GenerateMoves();
-
 	return true;
 }
 
@@ -122,4 +127,9 @@ int UChessModel::GetPiece(int Square) const
 int UChessModel::GetOwner(int Square) const
 {
 	return State->GetOwner(Square);
+}
+
+UChessModel::FBoardState* UChessModel::GetState() const
+{
+	return State;
 }
