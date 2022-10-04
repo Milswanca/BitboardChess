@@ -87,19 +87,18 @@ void UChessView::RenderSprite(USprite* Sprite, int Square, int Order, const glm:
 
 void UChessView::DebugRenderCheckMask(UChessModel* Model)
 {
-	uint64_t CheckMaskWhite = Model->GetState()->BMCheckMaskWhite;
-	uint64_t CheckMaskBlack = Model->GetState()->BMCheckMaskBlack;
+	uint64_t PinMasksWhite = 0ULL;
+
+	for (int i = 0; i < 8; ++i)
+	{
+		PinMasksWhite |= 0xFFFFFFFFFFFFFFFF & ~(Model->GetState()->Black.Vision);
+	}
 
 	for (int i = 0; i < 64; ++i)
 	{
-		if (CheckMaskWhite != 0xFFFFFFFFFFFFFFFF && (CheckMaskWhite & (1ULL << i)) != 0)
+		if (PinMasksWhite & (1ULL << i))
 		{
 			RenderSprite(WhiteSquare, i, 2, glm::vec4(1.0, 1.0f, 1.0f, 0.5f));
-		}
-
-		if (CheckMaskBlack != 0xFFFFFFFFFFFFFFFF && (CheckMaskBlack & (1ULL << i)) != 0)
-		{
-			RenderSprite(WhiteSquare, i, 2, glm::vec4(0.0, 0.0f, 0.0f, 0.5f));
 		}
 	}
 }

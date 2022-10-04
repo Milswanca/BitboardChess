@@ -7,6 +7,17 @@
 class UChessModel : public UObject
 {
 public:
+	struct FSideState
+	{
+	public:
+		uint64_t Vision;
+		uint64_t Occupation;
+
+		uint64_t HVPinMask;
+		uint64_t D12PinMask;
+		uint64_t* PinMaskRefs[8];
+	};
+
 	struct FBoardState
 	{
 		FBoardState();
@@ -14,6 +25,7 @@ public:
 
 	public:
 		EChessColors Turn;
+
 		int Moves[64];
 		unsigned int NumMoves;
 
@@ -24,20 +36,13 @@ public:
 		// Vision
 		uint64_t Targeting[64];
 		uint64_t TargetedBy[64];
-		uint64_t BMVisionWhite;
-		uint64_t BMVisionBlack;
-		uint64_t BMCheckMaskWhite;
-		uint64_t BMCheckMaskBlack;
 
-		// Colors
-		uint64_t BMWhite;
-		uint64_t BMBlack;
+		// Check Mask - we only need one because if you're in check it has to be your turn
+		uint64_t CheckMask;
 
-		// Pins
-		uint64_t BMHPin;
-		uint64_t BMVPin;
-		uint64_t BMD1Pin;
-		uint64_t BMD2Pin;
+		// Color State
+		FSideState White;
+		FSideState Black;
 
 		int GetPiece(int Square) const;
 		int GetOwner(int Square) const;
@@ -62,5 +67,6 @@ public:
 	FBoardState* GetState() const;
 
 private:
+	int PlayerTurn;
 	FBoardState* State;
 };
